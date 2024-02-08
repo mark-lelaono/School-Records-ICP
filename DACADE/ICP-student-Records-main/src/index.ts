@@ -37,6 +37,11 @@ const Errors = Variant({
 
 // Initialize a stable BTreeMap to store Student records
 let students = StableBTreeMap(text, Student, 0);
+let sortedStudents: Vec(Student);
+
+function validateCourseType(course: string): boolean {
+    return (course.trim().length > 0 && COURSE_TYPES.includes(course.toLowerCase()));
+}
 
 // Export the Canister with various functions
 
@@ -50,7 +55,7 @@ export default Canister({
         const id = uuidv4();
 
         // Validate the course type
-        if (!COURSE_TYPES.includes(course.toLowerCase())) {
+        if (!validateCourseType(course)) {
             return Err({ CourseDoesNotExist: `'${course}' is not a viable course, please select one of: ${COURSE_TYPES}` });
         }
 
@@ -65,10 +70,18 @@ export default Canister({
         };
 
         students.insert(user.id, user);
+        sortedStudents = students.values().sort((a: { cgpa: bigint; }, b: { cgpa: bigint; }) => {
+            // Convert nat64 (BigInt) to number for comparison
+            const cgpaA = Number(a.cgpa);
+            const cgpaB = Number(b.cgpa);
+    
+            // Sort in descending order based on CGPA
+            return cgpaB - cgpaA;
+        });
 
         return Ok(user);
     }),
-
+    
     /**
      * Retrieve all students.
      * @returns a Result containing a vector of students or an error if no students found.
@@ -98,7 +111,7 @@ export default Canister({
         const student = studentOpt.Some;
 
         // Validate the course type
-        if (payload.course && !COURSE_TYPES.includes(payload.course.toLowerCase())) {
+        if (!validateCourseType(payload.course)) {
             return Err({ CourseDoesNotExist: `'${payload.course}' is not a viable course, please select one of: ${COURSE_TYPES}` });
         }
 
@@ -109,6 +122,14 @@ export default Canister({
         };
 
         students.insert(updatedStudent.id, updatedStudent);
+        sortedStudents = students.values().sort((a: { cgpa: bigint; }, b: { cgpa: bigint; }) => {
+            // Convert nat64 (BigInt) to number for comparison
+            const cgpaA = Number(a.cgpa);
+            const cgpaB = Number(b.cgpa);
+    
+            // Sort in descending order based on CGPA
+            return cgpaB - cgpaA;
+        });
 
         return Ok(updatedStudent);
     }),
@@ -172,16 +193,6 @@ updateGrade: update([text, CgpaPayload], Result(Student, Errors), async (id, pay
 getTopStudents: query([nat64], Result(Vec(Student), Errors), (count: nat64) => {
     // Retrieve all student records from the students map
     const allStudents = students.values();
-
-    // Sort students by CGPA in descending order
-    const sortedStudents = allStudents.sort((a: { cgpa: any; }, b: { cgpa: any; }) => {
-        // Convert nat64 (BigInt) to number for comparison
-        const cgpaA = Number(a.cgpa);
-        const cgpaB = Number(b.cgpa);
-
-        // Sort in descending order based on CGPA
-        return cgpaB - cgpaA;
-    });
 
     // Take the top N students based on the count parameter
     const topStudents = sortedStudents.slice(0, Number(count));
